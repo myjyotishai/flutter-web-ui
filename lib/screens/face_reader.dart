@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:html' as html;
+import 'package:flutter/material.dart';
 
 class FaceReaderScreen extends StatefulWidget {
   @override
@@ -11,126 +10,98 @@ class FaceReaderScreen extends StatefulWidget {
 class _FaceReaderScreenState extends State<FaceReaderScreen> {
   String result = '';
   bool loading = false;
-  late String language;
-  html.File? selectedFile;
+  String language = 'English';
+  String? uploadedImageUrl;
 
-  final Map<String, Map<String, String>> i18n = {
-    'English': {
-      'title': 'Face Reader',
-      'upload': 'Upload Face Image',
-      'submit': 'Analyze',
-      'result': 'Personality Analysis',
-    },
-    'Hindi': {
-      'title': 'चेहरा विश्लेषण',
-      'upload': 'चेहरे की छवि अपलोड करें',
-      'submit': 'विश्लेषण करें',
-      'result': 'व्यक्तित्व विश्लेषण',
-    },
-    'Bhojpuri': {
-      'title': 'चेहरा पढ़ाई',
-      'upload': 'चेहरा के फोटो अपलोड करीं',
-      'submit': 'जांच करीं',
-      'result': 'व्यक्तित्व विश्लेषण',
-    },
-    'Telugu': {
-      'title': 'ముఖం విశ్లేషణ',
-      'upload': 'ముఖ చిత్రాన్ని అప్లోడ్ చేయండి',
-      'submit': 'విశ్లేషించు',
-      'result': 'వ్యక్తిత్వ విశ్లేషణ',
-    },
-  };
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void uploadFaceImage() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     language = args?['language'] ?? 'English';
-  }
 
-  void pickFile() {
-    html.FileUploadInputElement uploadInput = html.FileUploadInputElement(); 
-
+    final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.accept = 'image/*';
     uploadInput.click();
 
-    uploadInput.onChange.listen((e) {
-      final files = uploadInput.files;
-      if (files != null && files.isNotEmpty) {
+    uploadInput.onChange.listen((e) async {
+      final file = uploadInput.files!.first;
+      final reader = html.FileReader();
+
+      reader.readAsDataUrl(file); // For image preview
+      reader.onLoad.first.then((_) {
         setState(() {
-          selectedFile = files.first;
+          uploadedImageUrl = reader.result as String?;
         });
+      });
+
+      final readerBytes = html.FileReader();
+      readerBytes.readAsArrayBuffer(file);
+      await readerBytes.onLoad.first;
+
+      final formData = html.FormData();
+      formData.appendBlob('file', file, file.name);
+      formData.append('language', language);
+
+      final request = html.HttpRequest();
+      setState(() => loading = true);
+      try {
+        request.open('POST', 'https://fastapi-cayc.onrender.com/upload/face');
+        request.send(formData);
+        await request.onLoadEnd.first;
+
+        if (request.status == 200) {
+          final Map<String, dynamic> jsonResponse = json.decode(request.responseText!);
+          setState(() {
+            result = jsonResponse['summary'] ?? 'No result returned.';
+          });
+        } else {
+          setState(() {
+            result = 'Error: ${request.statusText}';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          result = 'Upload failed: $e';
+        });
+      } finally {
+        setState(() => loading = false);
       }
     });
   }
 
-  Future<void> uploadFace() async {
-    if (selectedFile == null) return;
-    setState(() => loading = true);
-
-    final reader = html.FileReader();
-    reader.readAsArrayBuffer(selectedFile!);
-    await reader.onLoad.first;
-
-    final data = reader.result as List<int>;
-
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('https://fastapi-cayc.onrender.com/upload/face'),
-    );
-    request.files.add(http.MultipartFile.fromBytes(
-      'file',
-      data,
-      filename: selectedFile!.name,
-    ));
-    request.fields['language'] = language;
-
-    final response = await request.send();
-    final respStr = await response.stream.bytesToString();
-
-    if (response.statusCode == 200) {
-      final decoded = json.decode(respStr);
-      setState(() {
-        result = decoded['result'] ?? 'No result';
-      });
-    } else {
-      setState(() {
-        result = "Upload failed: ${response.statusCode}";
-      });
-    }
-
-    setState(() => loading = false);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final t = i18n[language]!;
-
     return Scaffold(
-      appBar: AppBar(title: Text(t['title']!)),
+      appBar: AppBar(title: Text("Face Reader")),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            ElevatedButton(
-              onPressed: pickFile,
-              child: Text(t['upload']!),
-            ),
-            if (selectedFile != null) Text(selectedFile!.name),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: loading ? null : uploadFace,
-              child: loading ? CircularProgressIndicator() : Text(t['submit']!),
+            ElevatedButton.icon(
+              onPressed: loading ? null : uploadFaceImage,
+              icon: Icon(Icons.camera_alt),
+              label: Text("Upload Face Image"),
             ),
             SizedBox(height: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Text(
-                  result.isEmpty ? '' : "${t['result']}: \n\n$result",
-                  style: TextStyle(fontSize: 16),
+            if (loading) CircularProgressIndicator(),
+            if (!loading && result.isNotEmpty)
+              Card(
+                color: Colors.amber[50],
+                elevation: 4,
+                margin: EdgeInsets.all(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      if (uploadedImageUrl != null)
+                        Image.network(uploadedImageUrl!, height: 160),
+                      SizedBox(height: 10),
+                      Text(
+                        result,
+                        style: TextStyle(fontSize: 16, color: Colors.brown[900]),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            )
+              )
           ],
         ),
       ),

@@ -1,15 +1,19 @@
 name: jyotishai_flutter_web
-description: Full-featured JyotishAI Flutter Web App
-publish_to: 'none'
+description: Full-featured JyotishAI astrology app
+version: 1.0.0+1
 
 environment:
-  sdk: '>=2.17.0 <3.0.0'
+  sdk: ">=2.17.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^0.13.6
   provider: ^6.1.1
+  http: ^1.1.0
+  google_fonts: ^6.1.0
+  shared_preferences: ^2.2.2
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
