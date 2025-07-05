@@ -1,5 +1,5 @@
 name: jyotishai_flutter_web
-description: JyotishAI Flutter Web Interface
+description: Full-featured JyotishAI Flutter Web App
 publish_to: 'none'
 
 environment:
@@ -9,6 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^0.13.6
+  provider: ^6.1.1
 
 flutter:
   uses-material-design: true
